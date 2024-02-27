@@ -18,6 +18,7 @@ else:
     device = 'cpu'
 
 eval_iters = 200
+n_embd = 32
 
 # ------------
 
@@ -72,15 +73,28 @@ def estimate_loss():
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size):
+    def __init__(self):
         super().__init__()
         # each token directly reads off the logits for the next token from a lookup table
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.position_embedding_table = nn.Embedding(block_size, n_embd)    # 位置编码
+        self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
+        B, T = idx.shape
 
         # idx and targets are both (B,T) tensor of integers
-        logits = self.token_embedding_table(idx) # (B,T,C)
+        tok_emb = self.token_embedding_table(idx) # (B,T,C)
+        post_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T, C)
+        """
+        在 PyTorch 中，(B, T, C) + (T, C) 这样的矩阵加法操作是可以进行的，这是因为 PyTorch 支持广播（Broadcasting）机制。
+        广播机制允许在进行矩阵加法时，自动扩展维度较小的张量以匹配维度较大的张量。
+            在这个例子中，(T, C) 的矩阵会被扩展为 (B, T, C)，即在第 0 维（B 维）上复制 (T, C) 矩阵 B 次。
+        所以，(B, T, C) + (T, C) 的结果是一个 (B, T, C) 形状的张量，其中每个元素是对应的 (B, T, C) 和 (T, C) 张量的元素之和。
+        """
+        x = tok_emb + post_emb  # (B, T, C) + (T, C) 矩阵加法
+        
+        logits = self.lm_head(x)  # (B,T,vocab_size)
 
         if targets is None:
             loss = None
